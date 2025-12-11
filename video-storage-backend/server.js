@@ -1,37 +1,47 @@
-
-import express from "express";
-import cors from "cors";
-import axios from "axios";
+// server.js
+import express from 'express';
+import fetch from 'node-fetch'; // ya built-in fetch in Node.js 18+
+import bodyParser from 'body-parser';
+import 'dotenv/config';
 
 const app = express();
-app.use(cors());
-app.use(express.json({ limit: "200mb" })); // Large video support
+const PORT = process.env.PORT || 3000;
+const GH_TOKEN = process.env.GH_TOKEN;
 
-const GITHUB_TOKEN = process.env.GH_TOKEN;
-const OWNER = "developersuman131";
-const REPO = "video-storage";
+app.use(bodyParser.json({ limit: '500mb' }));
 
+// Upload endpoint
 app.post("/upload", async (req, res) => {
-    try {
-        const { filename, content } = req.body;
-        const url = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${filename}`;
-
-        const response = await axios.put(
-            url,
-            { message: "Video upload", content },
-            {
-                headers: {
-                    Authorization: `Bearer ${GITHUB_TOKEN}`,
-                    Accept: "application/vnd.github+json"
-                }
-            }
-        );
-
-        res.json({ success: true, download_url: response.data.content.download_url });
-    } catch (err) {
-        console.log(err.response?.data);
-        res.status(500).json({ success: false, error: err.message });
+  const { filename, content } = req.body;
+  try {
+    const response = await fetch(`https://api.github.com/repos/developersuman131/video-storage/contents/${filename}`, {
+      method: "PUT",
+      headers: { Authorization: `token ${GH_TOKEN}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ message: `Upload ${filename}`, content })
+    });
+    const data = await response.json();
+    if(data.content && data.content.download_url) {
+      res.json({ success: true, download_url: data.content.download_url });
+    } else {
+      res.json({ success: false, error: data.message });
     }
+  } catch(err) {
+    res.json({ success: false, error: err.message });
+  }
 });
 
-app.listen(3000, () => console.log("Server running on port 3000"));
+// List all videos
+app.get("/list", async (req, res) => {
+  try {
+    const response = await fetch(`https://api.github.com/repos/developersuman131/video-storage/contents/videos`, {
+      headers: { Authorization: `token ${GH_TOKEN}` }
+    });
+    const files = await response.json();
+    const videos = files.map(f => ({ name: f.name, url: f.download_url }));
+    res.json({ success: true, videos });
+  } catch(err) {
+    res.json({ success: false, error: err.message });
+  }
+});
+
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
